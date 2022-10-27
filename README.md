@@ -1,3 +1,5 @@
+![pic](pic.png)
+
 plipbox
 =======
 
