@@ -24,7 +24,6 @@
  *
  */
 
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
@@ -39,20 +38,22 @@
 #include <clib/dos_protos.h>
 #include <clib/alib_protos.h>
 #include <clib/socket_protos.h>
-#include <clib/netlib_protos.h>
 
 #include <stdlib.h>
 #include <string.h>
 
-#include <pragmas/exec_sysbase_pragmas.h>
-#include <pragmas/dos_pragmas.h>
-#include <pragmas/socket_pragmas.h>
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <proto/socket.h>
 
 /* SAS stuff */
 extern struct ExecBase *SysBase;
+#ifndef __SASC
+struct DosLibrary *DOSBase;
+#else
 extern struct DosLibrary *DOSBase;
+#endif
 struct Library *SocketBase;
-#define exit XCEXIT
 
 /* ---------- globals ---------------------------------------- */
 
@@ -76,7 +77,7 @@ static ULONG pkt_buf_size;
 static void udp_main_loop(long fd)
 {
   struct sockaddr_in c_addr;
-  long c_addr_len = sizeof(c_addr);
+  socklen_t c_addr_len = sizeof(c_addr);
   fd_set fds;
 
   FD_ZERO(&fds);
@@ -89,7 +90,7 @@ static void udp_main_loop(long fd)
 
     /* use break with Ctrl-C? */
     if(bmask & SIGBREAKF_CTRL_C) {
-      PutStr("***Break\n");
+      PutStr((STRPTR)"***Break\n");
       break;
     }
 
@@ -98,21 +99,21 @@ static void udp_main_loop(long fd)
       long res = recvfrom(fd, pkt_buf, pkt_buf_size, 0,
                           (struct sockaddr *)&c_addr, &c_addr_len);
       if(res < 0) {
-        PutStr("Error in recvfrom!\n");
+        PutStr((STRPTR)"Error in recvfrom!\n");
         break;
       }
 
       /* show some infos if verbose */
       if(args_array[VERBOSE_ARG]) {
-        char *hostaddrp = inet_ntoa(c_addr.sin_addr);
-        Printf("Got %ld bytes from %s!\n", res, hostaddrp);
+        STRPTR hostaddrp = Inet_NtoA(c_addr.sin_addr.s_addr);
+        Printf((STRPTR)"Got %ld bytes from %s!\n", res, (ULONG)hostaddrp);
       }
 
       /* send packet back */
       res = sendto(fd, pkt_buf, res, 0, 
                    (struct sockaddr *) &c_addr, c_addr_len);
       if (res < 0) {
-        PutStr("Error in sendto!\n");
+        PutStr((STRPTR)"Error in sendto!\n");
         break;
       }
     }
@@ -137,47 +138,51 @@ static void udp_server(void)
 
     /* reuse sock addr option */
     if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, 
-                  (caddr_t)&optval , sizeof(long)) == -1) {
-      PutStr("Warning: setsockopt failed?!\n");
+                  &optval , sizeof(long)) == -1) {
+      PutStr((STRPTR)"Warning: setsockopt failed?!\n");
     }
 
     /* setup address */
-    bzero(&s_addr, sizeof(s_addr));
+    memset(&s_addr, 0, sizeof(s_addr));
     s_addr.sin_family = AF_INET;
     s_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     s_addr.sin_port = htons((unsigned short)port);
 
     /* bind */
     if (bind(sockfd, (struct sockaddr *)&s_addr, sizeof(s_addr)) == 0) {
-      Printf("Bound to port %ld\n", port);
+      Printf((STRPTR)"Bound to port %ld\n", port);
 
       udp_main_loop(sockfd);
 
     } else {
-      PutStr("Error binding socket!\n");
+      PutStr((STRPTR)"Error binding socket!\n");
     }
 
     CloseSocket(sockfd);
   } else {
-    PutStr("Eorror opening socket!\n");
+    PutStr((STRPTR)"Error opening socket!\n");
   }
 }
 
 /* ---------- main -------------------------------------------- */
-void __stdargs _main(char *cmdline)
+int main(void)
 {
   BOOL ok = TRUE;
 
+#ifndef __SASC
+  DOSBase = (struct DosLibrary *)OpenLibrary((STRPTR)"dos.library", 0L);
+#endif
+
   /* open socket library */
-  SocketBase = OpenLibrary("bsdsocket.library", 3);
+  SocketBase = OpenLibrary((STRPTR)"bsdsocket.library", 3);
   if(SocketBase == NULL) {
-    PutStr("Error opening 'bsdsocket.library'!\n");
+    PutStr((STRPTR)"Error opening 'bsdsocket.library'!\n");
     ok = FALSE;
   } else {
     /* parse args */
-    args_rd = ReadArgs(args_template, args_array, NULL);
+    args_rd = ReadArgs((STRPTR)args_template, args_array, NULL);
     if(args_rd == NULL) {
-      PutStr("Error parsing arguments!\n");
+      PutStr((STRPTR)"Error parsing arguments!\n");
       ok = FALSE;
     } else {
       /* alloc data buffer */
@@ -189,13 +194,17 @@ void __stdargs _main(char *cmdline)
 
         FreeMem(pkt_buf, pkt_buf_size);
       } else {
-        PutStr("Error allocating packet buffer!\n");
+        PutStr((STRPTR)"Error allocating packet buffer!\n");
       }
   
       FreeArgs(args_rd);
     }
     CloseLibrary(SocketBase);
   }
+
+#ifndef __SASC
+  CloseLibrary((struct Library *)DOSBase);
+#endif
 
   /* return status */
   if(ok) {

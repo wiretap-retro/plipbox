@@ -1,19 +1,17 @@
 /* hw.h - hardware module of plihwbox.device */
-#ifndef __HW_H
-#define __HW_H
+#ifndef HW_H
+#define HW_H
 
 /* ----- hardware frame structure ----- */
 
-	/* magic packet types */
-#define HW_MAGIC_ONLINE    0xffff
-#define HW_MAGIC_OFFLINE   0xfffe
-#define HW_MAGIC_LOOPBACK  0xfffd
-
-   /* transport ethernet addresses */
+/* transport ethernet addresses */
 #define HW_ADDRFIELDSIZE         6
 
 #define HW_ETH_HDR_SIZE          14       /* ethernet header: dst, src, type */
 #define HW_ETH_MTU               1500
+
+/* reported BPS (bits! per second) for this device */
+#define HW_BPS (60 * 1024 * 8) /* 50 KiB/s */
 
 struct HWFrame {
    USHORT   hwf_Size;
@@ -25,17 +23,6 @@ struct HWFrame {
 };
 
 /* ----- config stuff ----- */
-#define COMMON_TEMPLATE "NOSPECIALSTATS/S,PRIORITY=PRI/K/N,BPS/K/N,MTU/K/N,"
-
-struct CommonConfig {
-   ULONG  nospecialstats;
-   LONG  *priority;
-   ULONG *bps;
-   ULONG *mtu;
-};
-
-/* fetch device specific device base */
-#include "hwbase.h"
 
 struct PLIPBase;
 
@@ -46,15 +33,19 @@ GLOBAL REGARGS VOID hw_cleanup(struct PLIPBase *pb);
 GLOBAL REGARGS BOOL hw_attach(struct PLIPBase *pb);
 GLOBAL REGARGS VOID hw_detach(struct PLIPBase *pb);
 
+GLOBAL REGARGS void hw_get_sys_time(struct PLIPBase *pb, struct timeval *time);
+
 GLOBAL REGARGS BOOL hw_send_frame(struct PLIPBase *pb, struct HWFrame *frame);
-GLOBAL REGARGS BOOL hw_send_magic_pkt(struct PLIPBase *pb, USHORT magic);
 
 GLOBAL REGARGS ULONG hw_recv_sigmask(struct PLIPBase *pb);
 GLOBAL REGARGS BOOL hw_recv_pending(struct PLIPBase *pb);
 GLOBAL REGARGS BOOL hw_recv_frame(struct PLIPBase *pb, struct HWFrame *frame);
 
-GLOBAL REGARGS void hw_config_init(struct PLIPBase *pb);
-GLOBAL REGARGS void hw_config_update(struct PLIPBase *pb, struct TemplateConfig *cfg);
+GLOBAL REGARGS void hw_config_init(struct PLIPBase *pb,
+                                   STRPTR *template_str,
+                                   struct CommonConfig **cfg,
+                                   STRPTR *config_file);
+GLOBAL REGARGS void hw_config_update(struct PLIPBase *pb);
 GLOBAL REGARGS void hw_config_dump(struct PLIPBase *pb);
 
 #endif

@@ -1,95 +1,37 @@
-#define DEBUG 0
-
-/*F*/ /* includes */
-#ifndef CLIB_ALIB_PROTOS_H
 #include <clib/alib_protos.h>
-#endif
-#ifndef CLIB_EXEC_PROTOS_H
-#include <clib/exec_protos.h>
-#include <pragmas/exec_sysbase_pragmas.h>
-#endif
-#ifndef CLIB_DOS_PROTOS_H
-#include <clib/dos_protos.h>
-#include <pragmas/dos_pragmas.h>
-#endif
-#ifndef CLIB_CIA_PROTOS_H
-#include <clib/cia_protos.h>
-#include <pragmas/cia_pragmas.h>
-#endif
-#ifndef CLIB_MISC_PROTOS_H
-#include <clib/misc_protos.h>
-#include <pragmas/misc_pragmas.h>
-#endif
-#ifndef CLIB_UTILITY_PROTOS_H
-#include <clib/utility_protos.h>
-#include <pragmas/utility_pragmas.h>
-#endif
-#ifndef CLIB_TIME_PROTOS_H
-#include <clib/timer_protos.h>
-#include <pragmas/timer_pragmas.h>
-#endif
-#ifndef DEVICES_SANA2_H
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <proto/cia.h>
+#include <proto/misc.h>
+#include <proto/utility.h>
+#include <proto/timer.h>
+
 #include <devices/sana2.h>
-#endif
-
-#ifndef HARDWARE_CIA_H
 #include <hardware/cia.h>
-#endif
-
-#ifndef DOS_DOSTAGS_H
 #include <dos/dostags.h>
-#endif
-
-#ifndef RESOURCES_MISC_H
 #include <resources/misc.h>
-#endif
-
-#ifndef EXEC_MEMORY_H
 #include <exec/memory.h>
-#endif
 
-#ifndef _STRING_H
 #include <string.h>
-#endif
 
-#ifndef __GLOBAL_H
 #include "global.h"
-#endif
-#ifndef __DEBUG_H
 #include "debug.h"
-#endif
-#ifndef __COMPILER_H
 #include "compiler.h"
-#endif
-/*E*/
+#include "device.h"
 
-/*F*/ /* imports */
 PUBLIC VOID SAVEDS ServerTask(VOID);
 PUBLIC BOOL remtracktype(BASEPTR, ULONG type);
 PUBLIC BOOL addtracktype(BASEPTR, ULONG type);
 PUBLIC BOOL gettrackrec(BASEPTR, ULONG type, struct Sana2PacketTypeStats *info);
 PUBLIC VOID dotracktype(BASEPTR, ULONG type, ULONG ps, ULONG pr, ULONG bs, ULONG br, ULONG pd);
 PUBLIC VOID freetracktypes(BASEPTR);
-#define min __builtin_min
-/*E*/
-/*F*/ /* exports */
-PUBLIC ASM SAVEDS struct Device *DevInit(REG(d0) BASEPTR, REG(a0) BPTR seglist, REG(a6) struct Library *_SysBase);
-PUBLIC ASM SAVEDS LONG DevOpen(REG(a1) struct IOSana2Req *ios2, REG(d0) ULONG unit, REG(d1) ULONG flags, REG(a6) BASEPTR);
-PUBLIC ASM SAVEDS BPTR DevExpunge(REG(a6) BASEPTR);
-PUBLIC ASM SAVEDS BPTR DevClose( REG(a1) struct IOSana2Req *ior, REG(a6) BASEPTR);
-PUBLIC VOID DevTermIO(BASEPTR, struct IOSana2Req *ios2);
-PUBLIC ASM SAVEDS VOID DevBeginIO(REG(a1) struct IOSana2Req *ios2, REG(a6) BASEPTR);
-PUBLIC ASM SAVEDS LONG DevAbortIO(REG(a1) struct IOSana2Req *ior, REG(a6) BASEPTR);
-/*E*/
-/*F*/ /* private */
 PRIVATE BOOL isinlist(struct Node *n, struct List *l);
-PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
-/*E*/
+PRIVATE VOID abort_req(BASEPTR, struct IOSana2Req *ior);
 
    /*
    ** various support routines
    */
-/*F*/ PRIVATE BOOL isinlist(struct Node *n, struct List *l)
+PRIVATE BOOL isinlist(struct Node *n, struct List *l)
 {
    struct Node *cmp;
 
@@ -98,26 +40,26 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
    
    return FALSE;
 }
-/*E*/
-/*F*/ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior)
+PRIVATE VOID abort_req(BASEPTR, struct IOSana2Req *ior)
 {
    Remove((struct Node*)ior);
    ior->ios2_Req.io_Error = IOERR_ABORTED;
    ior->ios2_WireError = 0;
    ReplyMsg((struct Message*)ior);
 }
-/*E*/
 
    /*
    ** initialise device
    */
-/*F*/ PUBLIC ASM SAVEDS struct Device *DevInit(REG(d0) BASEPTR, REG(a0) BPTR seglist, REG(a6) struct Library *_SysBase)
+PUBLIC ASM SAVEDS struct Device *DevInit(REG(d0,BASEPTR), REG(a0,BPTR seglist), REG(a6,struct Library *_SysBase))
 {
    BOOL ok;
    UBYTE *p;
    UWORD i;
 
    d(("entered device, initialising PLIPBase...\n"));
+
+   device_init(&pb->pb_DevNode);
 
       /* clear data base */
    for(p = ((UBYTE*)pb) + sizeof(struct Library), i = sizeof(struct PLIPBase)-sizeof(struct Library); i; i--)
@@ -150,16 +92,16 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    pb->pb_SpecialStats[S2SS_TXERRORS].Type = S2SS_PLIP_TXERRORS;
    pb->pb_SpecialStats[S2SS_TXERRORS].Count = 0;
-   pb->pb_SpecialStats[S2SS_TXERRORS].String = "TX Errors";
+   pb->pb_SpecialStats[S2SS_TXERRORS].String = (STRPTR)"TX Errors";
    pb->pb_SpecialStats[S2SS_COLLISIONS].Type = S2SS_PLIP_COLLISIONS;
    pb->pb_SpecialStats[S2SS_COLLISIONS].Count = 0;
-   pb->pb_SpecialStats[S2SS_COLLISIONS].String = "Collisions";
+   pb->pb_SpecialStats[S2SS_COLLISIONS].String = (STRPTR)"Collisions";
 
    ok = FALSE;
 
-   if (UtilityBase = OpenLibrary("utility.library", 37))
+   if (UtilityBase = OpenLibrary((STRPTR)"utility.library", 37))
    {
-      if (DOSBase = OpenLibrary("dos.library", 37))
+      if (DOSBase = OpenLibrary((STRPTR)"dos.library", 37))
       {
          ok = TRUE;
       }
@@ -179,12 +121,11 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    return (struct Device *)(ok ? pb : NULL);
 }
-/*E*/
 
    /*
    ** open device
    */
-/*F*/ PUBLIC ASM SAVEDS LONG DevOpen(REG(a1) struct IOSana2Req *ios2, REG(d0) ULONG unit, REG(d1) ULONG flags, REG(a6) BASEPTR)
+PUBLIC ASM SAVEDS LONG DevOpen(REG(a1,struct IOSana2Req *ios2), REG(d0,ULONG unit), REG(d1,ULONG flags), REG(a6,BASEPTR))
 {
    BOOL ok = FALSE;
    struct BufferManagement *bm;
@@ -237,37 +178,18 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
          ** since we want to allow several protocol stacks to use PLIP
          ** simultaneously.
          */
-         if (bm = AllocVec(sizeof(struct BufferManagement),MEMF_CLEAR|MEMF_PUBLIC))
+         if ((bm = (struct BufferManagement *)AllocVec(sizeof(struct BufferManagement),MEMF_CLEAR|MEMF_PUBLIC)) != NULL)
          {
             /*
             ** We don't care if there actually are buffer management functions,
             ** because there might be openers who just want some statistics
             ** from us.
             */
-#if defined(__SASC) && (__VERSION__ == 6) && (__REVISION__ >= 56)
-            /* Jippieee! */
-            bm->bm_CopyToBuffer = (BMFunc)GetTagData(S2_CopyToBuff, NULL,
+            bm->bm_CopyToBuffer = (BMFunc)GetTagData(S2_CopyToBuff, 0,
                               (struct TagItem *)ios2->ios2_BufferManagement);
-            bm->bm_CopyFromBuffer = (BMFunc)GetTagData(S2_CopyFromBuff, NULL,
+            bm->bm_CopyFromBuffer = (BMFunc)GetTagData(S2_CopyFromBuff, 0,
                               (struct TagItem *)ios2->ios2_BufferManagement);
-#else
-            /*
-            ** The type casting below is very beautiful. This is a SAS/C bug:
-            ** I have to cast the ULONG that I got from GetTagData() to a
-            ** (void (*)(void)) function pointer. Now I may cast it to (BMFunc),
-            ** which defines the __asm and register stuff.
-            **
-            ** I would call this a cast with ``soft force'', as it seems that
-            ** I slowly have to make the ULONG being used to the fact of
-            ** becoming a pointer (``Look, old mathematical chap: didn't you
-            ** always want to be a pointer? Did you know how less it takes, how
-            ** mighty the dark side of the force really is?'').
-            */
-            bm->bm_CopyToBuffer = (BMFunc)((void (*)())(GetTagData(S2_CopyToBuff, NULL,
-                              (struct TagItem *)ios2->ios2_BufferManagement)));
-            bm->bm_CopyFromBuffer = (BMFunc)((void (*)())(GetTagData(S2_CopyFromBuff, NULL,
-                              (struct TagItem *)ios2->ios2_BufferManagement)));
-#endif
+
             d(("starting servertask\n"));
             if (!pb->pb_Server)
             {
@@ -277,8 +199,8 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
                if (port = CreateMsgPort())
                {
                   d(("starting server"));
-                  if (pb->pb_Server = CreateNewProcTags(NP_Entry, ServerTask, NP_Name,
-                                                                  SERVERTASKNAME, TAG_DONE))
+                  if (pb->pb_Server = CreateNewProcTags(NP_Entry, (ULONG)ServerTask, NP_Name,
+                                                                  (ULONG)SERVERTASKNAME, TAG_DONE))
                   {
                      ss.ss_Error = 1;
                      ss.ss_PLIPBase = pb;
@@ -342,12 +264,11 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    return rv;
 }
-/*E*/
 
    /*
    ** close device
    */
-/*F*/ PUBLIC ASM SAVEDS BPTR DevClose(REG(a1) struct IOSana2Req *ior, REG(a6) BASEPTR)
+PUBLIC ASM SAVEDS BPTR DevClose(REG(a1,struct IOSana2Req *ior), REG(a6,BASEPTR))
 {
    BPTR seglist;
    struct BufferManagement *bm;
@@ -381,10 +302,9 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    return seglist;
 }
-/*E*/
 
 
-/*F*/ PUBLIC ASM SAVEDS BPTR DevExpunge(REG(a6) BASEPTR)
+PUBLIC ASM SAVEDS BPTR DevExpunge(REG(a6,BASEPTR))
 {
    BPTR seglist;
    ULONG sigb;
@@ -442,12 +362,11 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    return seglist;
 }
-/*E*/
 
    /*
    ** initiate io command (1st level dispatcher)
    */
-/*F*/ static INLINE VOID DevForwardIO(BASEPTR, struct IOSana2Req *ios2)
+static INLINE VOID DevForwardIO(BASEPTR, struct IOSana2Req *ios2)
 {
    d(("forwarding request %ld\n", ios2->ios2_Req.io_Command));
 
@@ -455,8 +374,7 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
    ios2->ios2_Req.io_Flags &= ~SANA2IOF_QUICK;
    PutMsg(pb->pb_ServerPort, (struct Message*)ios2);
 }
-/*E*/
-/*F*/ PUBLIC VOID DevTermIO(BASEPTR, struct IOSana2Req *ios2)
+PUBLIC VOID DevTermIO(BASEPTR, struct IOSana2Req *ios2)
 {
    d(("cmd = %ld, error = %ld, wireerror = %ld\n", ios2->ios2_Req.io_Command, ios2->ios2_Req.io_Error,ios2->ios2_WireError));
 
@@ -468,8 +386,7 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
    else           /* otherwise just mark it as done */
       ios2->ios2_Req.io_Message.mn_Node.ln_Type = NT_REPLYMSG;
 }
-/*E*/
-/*F*/ PUBLIC ASM SAVEDS VOID DevBeginIO(REG(a1) struct IOSana2Req *ios2, REG(a6) BASEPTR)
+PUBLIC ASM SAVEDS VOID DevBeginIO(REG(a1,struct IOSana2Req *ios2), REG(a6,BASEPTR))
 {
    ULONG mtu;
    
@@ -708,12 +625,11 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 
    return;
 }
-/*E*/
 
    /*
    ** stop io-command
    */
-/*F*/ PUBLIC ASM SAVEDS LONG DevAbortIO(REG(a1) struct IOSana2Req *ior, REG(a6) BASEPTR)
+PUBLIC ASM SAVEDS LONG DevAbortIO(REG(a1,struct IOSana2Req *ior), REG(a6,BASEPTR))
 {
    BOOL is;
    LONG rc = 0;
@@ -721,22 +637,22 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
    d(("cmd = %ld\n",ior->ios2_Req.io_Command));
 
    ObtainSemaphore(&pb->pb_WriteListSem);
-   if (is = isinlist((struct Node*)ior, (struct List*)&pb->pb_WriteList)) abort(pb,ior);
+   if ((is = isinlist((struct Node*)ior, (struct List*)&pb->pb_WriteList))) abort_req(pb,ior);
    ReleaseSemaphore(&pb->pb_WriteListSem);
    if (is) goto leave;
 
    ObtainSemaphore(&pb->pb_ReadListSem);
-   if (is = isinlist((struct Node*)ior, (struct List*)&pb->pb_ReadList)) abort(pb,ior);
+   if ((is = isinlist((struct Node*)ior, (struct List*)&pb->pb_ReadList))) abort_req(pb,ior);
    ReleaseSemaphore(&pb->pb_ReadListSem);
    if (is) goto leave;
 
    ObtainSemaphore(&pb->pb_EventListSem);
-   if (is = isinlist((struct Node*)ior, (struct List*)&pb->pb_EventList)) abort(pb,ior);
+   if ((is = isinlist((struct Node*)ior, (struct List*)&pb->pb_EventList))) abort_req(pb,ior);
    ReleaseSemaphore(&pb->pb_EventListSem);
    if (is) goto leave;
 
    ObtainSemaphore(&pb->pb_ReadOrphanListSem);
-   if (is = isinlist((struct Node*)ior, (struct List*)&pb->pb_ReadOrphanList)) abort(pb,ior);
+   if ((is = isinlist((struct Node*)ior, (struct List*)&pb->pb_ReadOrphanList))) abort_req(pb,ior);
    ReleaseSemaphore(&pb->pb_ReadOrphanListSem);
    if (is) goto leave;
 
@@ -745,5 +661,12 @@ PRIVATE VOID abort(BASEPTR, struct IOSana2Req *ior);
 leave:
    return rc;
 }
-/*E*/
+
+
+#ifdef __GNUC__
+extern void __restore_a4(void)
+{
+    __asm volatile("\tlea ___a4_init, a4");
+}
+#endif
 

@@ -1,11 +1,16 @@
 /* hwbase.h - hardware specific part of driver structure */
-#ifndef __HWBASE_H
-#define __HWBASE_H
+#ifndef HWBASE_H
+#define HWBASE_H
 
 /* ----- base structure for hardware ----- */
 
-/* reported BPS (bits! per second) for this device */
-#define HW_BPS (60 * 1024 * 8) /* 50 KiB/s */
+/* structure to be filled by ReadArgs template */
+struct TemplateConfig
+{
+   struct CommonConfig common;
+   ULONG *timeout;
+   ULONG no_burst;
+};
 
 struct HWBase
 {
@@ -35,6 +40,8 @@ struct HWBase
    ULONG                       hwb_TimeOutMicros;
    ULONG                       hwb_TimeOutSecs;
    UWORD                       hwb_BurstMode;
+
+   struct TemplateConfig       hwb_Config;
 };
 
 #define HWB_RECV_PENDING           0
@@ -52,13 +59,5 @@ struct HWBase
 
 #define CONFIGFILE "ENV:SANA2/plipbox.config"
 #define TEMPLATE "TIMEOUT/K/N,NOBURST/S"
-
-/* structure to be filled by ReadArgs template */ 
-struct TemplateConfig
-{
-   struct CommonConfig common;
-   ULONG *timeout;
-   ULONG no_burst;
-};
 
 #endif

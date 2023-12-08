@@ -1,33 +1,17 @@
-#ifndef __GLOBAL_H
-#define __GLOBAL_H
+#ifndef GLOBAL_H
+#define GLOBAL_H
 
    /* system header files */
-#ifndef DEVICES_SANA2_H
 #include <devices/sana2.h>
-#endif
-#ifndef EXEC_SEMAPHORES_H
 #include <exec/semaphores.h>
-#endif
-#ifndef EXEC_LISTS_H
 #include <exec/lists.h>
-#endif
-#ifndef EXEC_INTERRUPTS_H
 #include <exec/interrupts.h>
-#endif
-#ifndef EXEC_LIBRARIES_H
 #include <exec/libraries.h>
-#endif
-#ifndef DOS_DOS_H
 #include <dos/dos.h>
-#endif
 
-#ifndef __COMPILER_H
 #include "compiler.h"
-#endif
-#ifndef __HW_H
+#include "config.h"
 #include "hw.h"
-#endif
-
 
 /****************************************************************************/
 
@@ -49,7 +33,7 @@ struct TrackRec {
 /****************************************************************************/
 
 
-typedef BOOL (* ASM BMFunc)(REG(a0) void *, REG(a1) void *, REG(d0) LONG);
+typedef BOOL (* ASM BMFunc)(REG(a0,void *), REG(a1,void *), REG(d0,LONG));
 
 struct BufferManagement
 {
@@ -131,32 +115,28 @@ struct PLIPBase
    volatile UWORD              pb_ExtFlags;                    /* see below */
    UBYTE                       pb_CfgAddr[HW_ADDRFIELDSIZE];
    UBYTE                       pb_DefAddr[HW_ADDRFIELDSIZE];
-   struct HWBase               pb_HWBase;
+   APTR                        pb_HWBase;
    struct HWFrame        *     pb_Frame;
    ULONG                       pb_BPS;
    ULONG                       pb_MTU;
 };
 
-#ifdef __SASC
      /*
      ** redirect all shared library bases to our device base.
      */
-#  define SysBase      pb->pb_SysBase
-#  define DOSBase      pb->pb_DOSBase
-#  define UtilityBase  pb->pb_UtilityBase
+#define SysBase      pb->pb_SysBase
+#define DOSBase      pb->pb_DOSBase
+#define UtilityBase  pb->pb_UtilityBase
      /*
      ** This macro declares a local variable which temporary gets
      ** SysBase directly from AbsExecBase.
      */
-#  define LOCALSYSBASE struct { void *pb_SysBase; } *pb = (void*)0x4
+#define LOCALSYSBASE struct { void *pb_SysBase; } *pb = (void*)0x4
      /*
      ** Use this macro as argument for all functions which need to
      ** have access to your data base.
      */
-#  define BASEPTR      struct PLIPBase *pb
-#else
-#  error Please define library bases for your compiler
-#endif
+#define BASEPTR      struct PLIPBase *pb
 
    /*
    ** Values for PLIPBase->pb_Flags

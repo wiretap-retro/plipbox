@@ -2,89 +2,47 @@
  * hw.c - hardware dependent part of driver
  */
 
-#define DEBUG 0
+#include <proto/exec.h>
+#include <proto/dos.h>
+#include <proto/cia.h>
+#include <proto/misc.h>
+#include <proto/timer.h>
+#include <proto/utility.h>
 
-/*F*/ /* includes */
-#ifndef CLIB_EXEC_PROTOS_H
-#include <clib/exec_protos.h>
-#include <pragmas/exec_sysbase_pragmas.h>
-#endif
-#ifndef CLIB_DOS_PROTOS_H
-#include <clib/dos_protos.h>
-#include <pragmas/dos_pragmas.h>
-#endif
-#ifndef CLIB_CIA_PROTOS_H
-#include <clib/cia_protos.h>
-#include <pragmas/cia_pragmas.h>
-#endif
-#ifndef CLIB_MISC_PROTOS_H
-#include <clib/misc_protos.h>
-#include <pragmas/misc_pragmas.h>
-#endif
-#ifndef CLIB_TIME_PROTOS_H
-#include <clib/timer_protos.h>
-#include <pragmas/timer_pragmas.h>
-#endif
-#ifndef CLIB_UTILITY_PROTOS_H
-#include <clib/utility_protos.h>
-#include <pragmas/utility_pragmas.h>
-#endif
-
-#ifndef EXEC_MEMORY_H
 #include <exec/memory.h>
-#endif
-#ifndef EXEC_INTERRUPTS_H
 #include <exec/interrupts.h>
-#endif
-#ifndef EXEC_DEVICES_H
 #include <exec/devices.h>
-#endif
-#ifndef EXEC_IO_H
 #include <exec/io.h>
-#endif
 
-#ifndef DEVICES_SANA2_H
 #include <devices/sana2.h>
-#endif
-
-#ifndef HARDWARE_CIA_H
 #include <hardware/cia.h>
-#endif
-
-#ifndef RESOURCES_MISC_H
 #include <resources/misc.h>
-#endif
 
-#ifndef _STRING_H
 #include <string.h>
-#endif
 
-#ifndef __GLOBAL_H
 #include "global.h"
-#endif
-#ifndef __DEBUG_H
 #include "debug.h"
-#endif
-#ifndef __COMPILER_H
 #include "compiler.h"
-#endif
-#ifndef __HW_H
 #include "hw.h"
-#endif
-/*E*/
+#include "hwbase.h"
+
+/* magic packet types */
+#define HW_MAGIC_ONLINE    0xffff
+#define HW_MAGIC_OFFLINE   0xfffe
+#define HW_MAGIC_LOOPBACK  0xfffd
 
 /* externs in asm code */
-GLOBAL VOID ASM interrupt(REG(a1) struct HWB *hwb);
-GLOBAL USHORT ASM CRC16(REG(a0) UBYTE *, REG(d0) SHORT);
-GLOBAL BOOL ASM hwsend(REG(a0) struct HWBase *hwb, REG(a1) struct HWFrame *frame);
-GLOBAL BOOL ASM hwrecv(REG(a0) struct HWBase *hwb, REG(a1) struct HWFrame *frame);
-GLOBAL BOOL ASM hwburstsend(REG(a0) struct HWBase *, REG(a1) struct HWFrame *);
-GLOBAL BOOL ASM hwburstrecv(REG(a0) struct HWBase *, REG(a1) struct HWFrame *);
+GLOBAL VOID ASM interrupt(REG(a1,struct HWBase *hwb));
+GLOBAL USHORT ASM CRC16(REG(a0,UBYTE *), REG(d0,SHORT));
+GLOBAL BOOL ASM hwsend(REG(a0,struct HWBase *hwb), REG(a1,struct HWFrame *frame));
+GLOBAL BOOL ASM hwrecv(REG(a0,struct HWBase *hwb), REG(a1,struct HWFrame *frame));
+GLOBAL BOOL ASM hwburstsend(REG(a0,struct HWBase *), REG(a1,struct HWFrame *));
+GLOBAL BOOL ASM hwburstrecv(REG(a0,struct HWBase *), REG(a1,struct HWFrame *));
 
    /* amiga.lib provides for these symbols */
-GLOBAL FAR volatile struct CIA ciaa,ciab;
+extern FAR volatile struct CIA ciaa,ciab;
 
-PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0) ULONG sigmask, REG(a1) struct PLIPBase *hwb);
+PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0,ULONG sigmask), REG(a1,struct PLIPBase *hwb));
 
 /* CIA access macros & functions */
 #define CLEARINT        SetICR(CIAABase, CIAICRF_FLG)
@@ -107,7 +65,7 @@ PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0) ULONG sigmask, REG(a1) struct PLIPBa
 #define CLEARREQUEST(b) ciab.ciapra &= ~HS_REQ_MASK
 
 /* magic packet to tell plipbox firmware we go online and our MAC */
-GLOBAL REGARGS BOOL hw_send_magic_pkt(struct PLIPBase *pb, USHORT magic)
+static REGARGS BOOL hw_send_magic_pkt(struct PLIPBase *pb, USHORT magic)
 {
    BOOL rc;
 
@@ -124,23 +82,37 @@ GLOBAL REGARGS BOOL hw_send_magic_pkt(struct PLIPBase *pb, USHORT magic)
    return rc;
 }
 
+GLOBAL REGARGS void hw_get_sys_time(struct PLIPBase *pb, struct timeval *time)
+{
+  struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
+  GetSysTime(time);
+}
+
 #define PLIP_DEFTIMEOUT          (500*1000)
 #define PLIP_MINTIMEOUT          500
 #define PLIP_MAXTIMEOUT          (10000*1000)
 
-GLOBAL REGARGS void hw_config_init(struct PLIPBase *pb)
+GLOBAL REGARGS void hw_config_init(struct PLIPBase *pb,
+                                   STRPTR *template_str,
+                                   struct CommonConfig **cfg,
+                                   STRPTR *config_file)
 {
-  struct HWBase *hwb = &pb->pb_HWBase;
+  struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
 
   hwb->hwb_TimeOutSecs = PLIP_DEFTIMEOUT / 1000000L;
   hwb->hwb_TimeOutMicros = PLIP_DEFTIMEOUT % 1000000L;
   hwb->hwb_BurstMode = 1;
+
+  *template_str = (STRPTR)TEMPLATE;
+  *config_file = (STRPTR)CONFIGFILE;
+  *cfg = (struct CommonConfig *)&hwb->hwb_Config;
 }
 
-GLOBAL REGARGS void hw_config_update(struct PLIPBase *pb, struct TemplateConfig *args)
+GLOBAL REGARGS void hw_config_update(struct PLIPBase *pb)
 {
-  struct HWBase *hwb = &pb->pb_HWBase;
-  
+  struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
+  struct TemplateConfig *args = &hwb->hwb_Config;
+
   if (args->timeout) {
     LONG to = BOUNDS(*args->timeout, PLIP_MINTIMEOUT, PLIP_MAXTIMEOUT);
     hwb->hwb_TimeOutMicros = to % 1000000L;
@@ -155,24 +127,28 @@ GLOBAL REGARGS void hw_config_update(struct PLIPBase *pb, struct TemplateConfig 
 GLOBAL REGARGS void hw_config_dump(struct PLIPBase *pb)
 {
 #if DEBUG & 1
-  struct HWBase *hwb = &pb->pb_HWBase;
+  struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
 #endif
   d(("timeOut %ld.%ld\n", hwb->hwb_TimeOutSecs, hwb->hwb_TimeOutMicros));
-  d(("burstSize %ld\n", (ULONG)hwb->hwb_BurstSize));
+  d(("burstMode %ld\n", (ULONG)hwb->hwb_BurstMode));
 }
 
 GLOBAL REGARGS BOOL hw_init(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
-   
    BOOL rc = FALSE;
+   struct HWBase *hwb = (struct HWBase *)AllocVec(sizeof(struct HWBase), MEMF_CLEAR|MEMF_ANY);
+   pb->pb_HWBase = hwb;
+   if(hwb == NULL) {
+     d(("no memory!\n"));
+     return FALSE;
+   }
    
    /* clone sys base, process */
    hwb->hwb_SysBase = pb->pb_SysBase;
    hwb->hwb_Server = pb->pb_Server;
    hwb->hwb_MaxFrameSize = (UWORD)pb->pb_MTU + HW_ETH_HDR_SIZE;
-   d2(("sysbase=%08lx, server=%08lx, hwb=%08lx, maxFrameSize=%ld\n",
-      hwb->hwb_SysBase, hwb->hwb_Server, hwb, (ULONG)hwb->hwb_MaxFrameSize));
+   d2(("hwb=%08lx, sysbase=%08lx, server=%08lx, hwb=%08lx, maxFrameSize=%ld\n",
+      hwb, hwb->hwb_SysBase, hwb->hwb_Server, hwb, (ULONG)hwb->hwb_MaxFrameSize));
    
    if ((hwb->hwb_IntSig = AllocSignal(-1)) != -1)
    {
@@ -198,7 +174,7 @@ GLOBAL REGARGS BOOL hw_init(struct PLIPBase *pb)
 
          /* enter port address */
          hwb->hwb_TimeoutReq.tr_node.io_Message.mn_ReplyPort = hwb->hwb_TimeoutPort;
-         if (!OpenDevice("timer.device", UNIT_MICROHZ, (struct IORequest*)&hwb->hwb_TimeoutReq, 0))
+         if (!OpenDevice((STRPTR)"timer.device", UNIT_MICROHZ, (struct IORequest*)&hwb->hwb_TimeoutReq, 0))
          {
              TimerBase = (struct Library *)hwb->hwb_TimeoutReq.tr_node.io_Device;
 
@@ -229,7 +205,7 @@ GLOBAL REGARGS BOOL hw_init(struct PLIPBase *pb)
 
 GLOBAL REGARGS VOID hw_cleanup(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    
    if (hwb->hwb_TimeoutPort)
    {
@@ -252,6 +228,9 @@ GLOBAL REGARGS VOID hw_cleanup(struct PLIPBase *pb)
    if (hwb->hwb_IntSig != -1) {
       FreeSignal(hwb->hwb_IntSig);
    }
+
+   FreeVec(hwb);
+   pb->pb_HWBase = NULL;
 }
 
 /*
@@ -259,25 +238,25 @@ GLOBAL REGARGS VOID hw_cleanup(struct PLIPBase *pb)
  */
 GLOBAL REGARGS BOOL hw_attach(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    BOOL rc = FALSE;
 
-   d(("entered\n"));
+   d(("hw_attach entered, hwb=%08lx\n", hwb));
 
    hwb->hwb_AllocFlags = 0;
-   if (MiscBase = OpenResource("misc.resource"))
+   if ((MiscBase = OpenResource((STRPTR)"misc.resource")) != NULL)
    {
-      if (CIAABase = OpenResource("ciaa.resource"))
+      if ((CIAABase = OpenResource((STRPTR)"ciaa.resource")) != NULL)
       {
          CiaBase = CIAABase;
 
          d(("ciabase is %lx\n",CiaBase));
 
          /* obtain exclusive access to the parallel hardware */
-         if (!AllocMiscResource(MR_PARALLELPORT, pb->pb_DevNode.lib_Node.ln_Name))
+         if (!AllocMiscResource(MR_PARALLELPORT, (STRPTR)pb->pb_DevNode.lib_Node.ln_Name))
          {
             hwb->hwb_AllocFlags |= 1;
-            if (!AllocMiscResource(MR_PARALLELBITS, pb->pb_DevNode.lib_Node.ln_Name))
+            if (!AllocMiscResource(MR_PARALLELBITS, (STRPTR)pb->pb_DevNode.lib_Node.ln_Name))
             {
                hwb->hwb_AllocFlags |= 2;
 
@@ -327,6 +306,12 @@ GLOBAL REGARGS BOOL hw_attach(struct PLIPBase *pb)
    else
       d(("no misc resource\n"));
 
+   /* finally send magic packet to tell mcu to go online */
+   if(rc) {
+      d(("send magic packet %04lu\n", HW_MAGIC_ONLINE));
+      rc = hw_send_magic_pkt(pb, HW_MAGIC_ONLINE);
+   }
+
    return rc;
 }
 
@@ -335,8 +320,11 @@ GLOBAL REGARGS BOOL hw_attach(struct PLIPBase *pb)
  */
 GLOBAL REGARGS VOID hw_detach(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    
+   /* first tell mcu to go offline */
+   hw_send_magic_pkt(pb, HW_MAGIC_OFFLINE);
+
    if (hwb->hwb_AllocFlags & 4)
    {
       PAREXIT;
@@ -352,9 +340,9 @@ GLOBAL REGARGS VOID hw_detach(struct PLIPBase *pb)
    hwb->hwb_AllocFlags = 0;
 }
 
-PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0) ULONG sigmask, REG(a1) struct PLIPBase *pb)
+PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0,ULONG sigmask), REG(a1,struct PLIPBase *pb))
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    
    d8(("+ex\n"));
    
@@ -373,7 +361,7 @@ PRIVATE ULONG ASM SAVEDS exceptcode(REG(d0) ULONG sigmask, REG(a1) struct PLIPBa
 
 GLOBAL REGARGS BOOL hw_send_frame(struct PLIPBase *pb, struct HWFrame *frame)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    BOOL rc;
 
    /* wait until I/O block is safe to be reused */
@@ -403,7 +391,7 @@ GLOBAL REGARGS BOOL hw_send_frame(struct PLIPBase *pb, struct HWFrame *frame)
 
 GLOBAL REGARGS BOOL hw_recv_pending(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    if ((hwb->hwb_Flags & HWF_RECV_PENDING) == HWF_RECV_PENDING) 
    {
       return TRUE;
@@ -415,36 +403,58 @@ GLOBAL REGARGS BOOL hw_recv_pending(struct PLIPBase *pb)
 
 GLOBAL REGARGS BOOL hw_recv_frame(struct PLIPBase *pb, struct HWFrame *frame)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
-   BOOL rc;
+   ULONG pkttyp;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
+   BOOL rc = TRUE;
 
-   /* wait until I/O block is safe to be reused */
-   while(!hwb->hwb_TimeoutSet) Delay(1L);
-    
-   /* start new timeout timer */
-   hwb->hwb_TimeoutReq.tr_time.tv_secs    = hwb->hwb_TimeOutSecs;
-   hwb->hwb_TimeoutReq.tr_time.tv_micro   = hwb->hwb_TimeOutMicros;
-   hwb->hwb_TimeoutSet = 0;
-   SendIO((struct IORequest*)&hwb->hwb_TimeoutReq);
+   while(1) {
+      /* wait until I/O block is safe to be reused */
+      while(!hwb->hwb_TimeoutSet) Delay(1L);
 
-   /* hw recv */
-   if(hwb->hwb_BurstMode) {
-     d8(("+rxb\n"));
-     rc = hwburstrecv(hwb, frame);
-   } else { 
-     d8(("+rx\n"));
-     rc = hwrecv(hwb, frame);
+      /* start new timeout timer */
+      hwb->hwb_TimeoutReq.tr_time.tv_secs    = hwb->hwb_TimeOutSecs;
+      hwb->hwb_TimeoutReq.tr_time.tv_micro   = hwb->hwb_TimeOutMicros;
+      hwb->hwb_TimeoutSet = 0;
+      SendIO((struct IORequest*)&hwb->hwb_TimeoutReq);
+
+      /* hw recv */
+      if(hwb->hwb_BurstMode) {
+        d8(("+rxb\n"));
+        rc = hwburstrecv(hwb, frame);
+      } else {
+        d8(("+rx\n"));
+        rc = hwrecv(hwb, frame);
+      }
+      d8(("+rx: %s\n", rc ? "ok":"ERR"));
+
+      /* stop timeout timer */
+      AbortIO((struct IORequest*)&hwb->hwb_TimeoutReq);
+
+      /* error? */
+      if(!rc) {
+         break;
+      }
+
+      /* perform internal loop back of magic packets of type 0xfffd */
+      pkttyp = frame->hwf_Type;
+      if(pkttyp == HW_MAGIC_LOOPBACK) {
+         d(("loop back packet (size %ld)\n",frame->hwf_Size));
+         rc = hw_send_frame(pb, frame);
+      }
+      /* plipbox requests online magic (again) */
+      else if(pkttyp == HW_MAGIC_ONLINE) {
+         d(("request online magic"));
+         rc = hw_send_magic_pkt(pb, HW_MAGIC_ONLINE);
+      }
+      else {
+         break;
+      }
    }
-   d8(("+rx: %s\n", rc ? "ok":"ERR"));
-    
-   /* stop timeout timer */
-   AbortIO((struct IORequest*)&hwb->hwb_TimeoutReq);
-   
    return rc;
 }
 
 GLOBAL REGARGS ULONG hw_recv_sigmask(struct PLIPBase *pb)
 {
-   struct HWBase *hwb = &pb->pb_HWBase;
+   struct HWBase *hwb = (struct HWBase *)pb->pb_HWBase;
    return hwb->hwb_IntSigMask | hwb->hwb_CollSigMask;
 }

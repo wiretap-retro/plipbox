@@ -1,44 +1,22 @@
-/*F*/ /* includes */
-#ifndef CLIB_EXEC_PROTOS_H
-#include <clib/exec_protos.h>
-#include <pragmas/exec_sysbase_pragmas.h>
-#endif
+#include <proto/exec.h>
 
-#ifndef EXEC_MEMORY_H
 #include <exec/memory.h>
-#endif
-#ifndef EXEC_LISTS_H
 #include <exec/lists.h>
-#endif
-#ifndef EXEC_NODES_H
 #include <exec/nodes.h>
-#endif
 
-#ifndef _STRING_H
 #include <string.h>
-#endif
 
-#ifndef __GLOBAL_H
 #include "global.h"
-#endif
-
-#ifndef __DEBUG_H
 #include "debug.h"
-#endif
 
-/*E*/
-/*F*/ /* exports */
 PUBLIC BOOL addtracktype(BASEPTR, ULONG type);
 PUBLIC BOOL remtracktype(BASEPTR, ULONG type);
 PUBLIC VOID dotracktype(BASEPTR, ULONG type, ULONG ps, ULONG pr, ULONG bs, ULONG br, ULONG pd);
-PUBLIC BOOL gettrackrec(BASEPTR, ULONG type, APTR info);
+PUBLIC BOOL gettrackrec(BASEPTR, ULONG type, struct Sana2PacketTypeStats *info);
 PUBLIC VOID freetracktypes(BASEPTR);
-/*E*/
-/*F*/ /* private */
 PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
-/*E*/
 
-/*F*/ PRIVATE INLINE struct TrackRec *findtracktype(BASEPTR, ULONG type)
+PRIVATE INLINE struct TrackRec *findtracktype(BASEPTR, ULONG type)
 {
    struct TrackRec * tr;
 
@@ -51,8 +29,8 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
 
    return( NULL );
 }
-/*E*/
-/*F*/ PUBLIC BOOL addtracktype(BASEPTR, ULONG type)
+
+PUBLIC BOOL addtracktype(BASEPTR, ULONG type)
 {
    struct TrackRec *tr;
    BOOL rv = FALSE;
@@ -60,7 +38,7 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
    ObtainSemaphore(&pb->pb_TrackListSem);
    if (!(tr = findtracktype(pb, type)))
    {
-      if (tr = AllocVec(sizeof(*tr), MEMF_CLEAR))
+      if ((tr = AllocVec(sizeof(*tr), MEMF_CLEAR)) != NULL)
       {
          tr->tr_Count = 1;
          tr->tr_PacketType = type;
@@ -77,14 +55,14 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
 
    return rv;
 }
-/*E*/
-/*F*/ PUBLIC BOOL remtracktype(BASEPTR, ULONG type)
+
+PUBLIC BOOL remtracktype(BASEPTR, ULONG type)
 {
    struct TrackRec *tr;
    BOOL rv = FALSE;
 
    ObtainSemaphore( &pb->pb_TrackListSem );
-   if (tr = findtracktype(pb, type))
+   if ((tr = findtracktype(pb, type)) != NULL)
    {
       if (!(--tr->tr_Count))
       {
@@ -97,13 +75,13 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
 
    return rv;
 }
-/*E*/
-/*F*/ PUBLIC VOID dotracktype(BASEPTR, ULONG type, ULONG ps, ULONG pr, ULONG bs, ULONG br, ULONG pd)
+
+PUBLIC VOID dotracktype(BASEPTR, ULONG type, ULONG ps, ULONG pr, ULONG bs, ULONG br, ULONG pd)
 {
    struct TrackRec * tr;
 
    ObtainSemaphore(&pb->pb_TrackListSem);
-   if (tr = findtracktype(pb, type))
+   if ((tr = findtracktype(pb, type)) != NULL)
    {
       tr->tr_Sana2PacketTypeStats.PacketsSent += ps;
       tr->tr_Sana2PacketTypeStats.PacketsReceived += pr;
@@ -113,14 +91,14 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
    }
    ReleaseSemaphore(&pb->pb_TrackListSem);
 }
-/*E*/
-/*F*/ PUBLIC BOOL gettrackrec(BASEPTR, ULONG type, struct Sana2PacketTypeStats *info)
+
+PUBLIC BOOL gettrackrec(BASEPTR, ULONG type, struct Sana2PacketTypeStats *info)
 {
    struct TrackRec * tr;
    BOOL rv = FALSE;
 
    ObtainSemaphoreShared( &pb->pb_TrackListSem );
-   if (tr = findtracktype(pb, type))
+   if ((tr = findtracktype(pb, type)) != NULL)
    {
       *info = tr->tr_Sana2PacketTypeStats;
       rv = TRUE;
@@ -129,8 +107,8 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
 
    return rv;
 }
-/*E*/
-/*F*/ PUBLIC VOID freetracktypes(BASEPTR)
+
+PUBLIC VOID freetracktypes(BASEPTR)
 {
    struct Node *tr;
 
@@ -139,5 +117,4 @@ PRIVATE struct TrackRec *findtracktype(BASEPTR, ULONG type);
       FreeVec(tr);
    ReleaseSemaphore(&pb->pb_TrackListSem);
 }
-/*E*/
 
