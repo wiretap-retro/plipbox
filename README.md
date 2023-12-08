@@ -1,4 +1,4 @@
-![pic](/pipbox-wiretap-w-rst/pic.png)
+![pic](/plipbox-wiretap-w-rst/pic.png)
 
 plipbox
 =======
