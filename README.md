@@ -1,4 +1,8 @@
 ![pic](/plipbox-wiretap-w-rst/pic.png)
+\
+The plipbox-wiretap folder contains the original enhanced design with additional power connectors.
+\
+The plipbox-wiretap-w-rst folder contains the same as above, but with a Reset Enable feature. This is useful for the Amiga, so when you reset the machine, it will automatically reset the Plipbox so you don't have to unplug it and re-plug it to make it work again. Feature added per this video demonstation: https://www.youtube.com/watch?v=10mgeOocGzo
 
 plipbox
 =======
